@@ -68,9 +68,12 @@ static int type;			// number corresponding to token
 ///////////////////////////////////////////////////////ESTRUCTURAS///////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////PROTOTIPOS DE FUNCIONES/////////////////////////////////////////////////
-static void error(const char*, ...);		// error handling routine
-static void readin(char*/*raw*/);			// reads the file and calls error if needed. Puts source code in raw.
-
+static void error(const char*, ...);	// error handling routine. Prints the error and gives up on compiling
+static void readin(char*/*raw*/);		// reads the file and calls error if needed. Puts source code in raw.
+static void comment();					// skips comments withing wource code.
+static void ident();					// gets identifier or reserved word ant returns it token.
+static void numbers();					// gets number and returns token, error if number is invalid.
+static void lex();						// returns token read in source code. error if invalid
 //////////////////////////////////////////////////////////Main///////////////////////////////////////////////////////////
 int main(int argc, char *argv[]){
 
@@ -100,15 +103,27 @@ static void error(const char *format, ...)
 
 	va_list: The type va_list is used for argument pointer variables.
 
-	va_start(va_list ap, last-required):	Initializes the argument pointer variable ap to point to the first 
-												of the optional arguments of the current function.
+	***PROTOTYPE:
+	va_start(va_list ap, last-required)	
 
-	va_arg (va_list ap, type):	Returns the value of the next optional argument,
-									and modifies the value of ap to point to the subsequent argument.
-								type must be a self-promoting type (not 'char' or 'short int' or 'float')
-									that matches the type of the actual argument.
+	***DESCRIPTION:
+		Initializes the argument pointer variable ap to point to the first 
+		of the optional arguments of the current function.
 
-	va_end (va_list ap):	Ends the use of ap. After a va_end call, further va_arg calls with the same ap may not work.
+	***PROTOTYPE:
+	va_arg (va_list ap, type)
+
+	***DESCRIPTION:
+		Returns the value of the next optional argument,
+		and modifies the value of ap to point to the subsequent argument.
+		type must be a self-promoting type (not 'char' or 'short int' or 'float')
+		that matches the type of the actual argument.
+
+	***PROTOTYPE:
+	va_end (va_list ap)
+
+	***DESCRIPTION:
+	Ends the use of ap. After a va_end call, further va_arg calls with the same ap may not work.
 	
 	*/
 
@@ -135,10 +150,17 @@ static void readin(char *file)
 	/*
 	*****fstat function:
 	https://pubs.opengroup.org/onlinepubs/009696699/functions/fstat.html
-		The fstat(int fildes, struct stat *buf) function shall obtain information about an open file 
+
+	***PROTOTYPE:
+		fstat(int fildes, struct stat *buf) 
+
+	***DESCRIPTION:
+		The function shall obtain information about an open file 
 		associated with the file descriptor fildes, and shall write it to the area pointed to by buf.
 
-	Upon successful completion, 0 shall be returned. Otherwise, -1 shall be returned and errno set to indicate the error.
+	***RETURNS:
+		Upon successful completion, 0 shall be returned.
+		Otherwise, -1 shall be returned and errno set to indicate the error.
 
 	*****Stat Structure:
 	https://pubs.opengroup.org/onlinepubs/009696699/basedefs/sys/stat.h.html
@@ -178,8 +200,10 @@ static void comment()						// comments with format: {...}
 	}
 }
 
+// since both, ident and reserved words can start with lowercase letters there is no way to distinguish
+// so reserved words are handled in the ident function
 static void ident(){
-
+	
 	char *p;
 	size_t i, len;
 
@@ -244,9 +268,30 @@ static void number(){
 
 	token[j] = '\0';
 
+	/*
+	***** strtonum:
+	https://man.openbsd.org/strtonum.3
+
+	***PROTOTYPE:
+	strtonum(const char *nptr, long long minval, long long maxval, const char **errstr)
+
+	***DESCRIPTION:
+	The strtonum() function converts the string in nptr to a long long value.
+
+	The value obtained is then checked against the provided minval and maxval bounds.
+	If errstr is non-null, strtonum() stores an error string in *errstr indicating the failure.
+
+	***RETURNS:
+	The strtonum() function returns the result of the conversion,
+		unless the value would exceed the provided bounds or is invalid.
+	On error, 0 is returned, errno is set, and errstr will point to an error message.
+	*errstr will be set to NULL on success
+	
+	*/
+
 	(void) strtonum(token, 0, LONG_MAX, &errstr);
 
-	if (errstr != NULL)	error("Invalid number: %s", token);
+	if (errstr != NULL)	error("Invalid number: %s.", token);
 
 	return TOK_NUMBER;
 }
@@ -286,14 +331,16 @@ static int lex()
 	case ')':
 		return (*raw);
 	case ':':
-		if (*++raw != '=')	error("Unknown token: '%c'", *raw);
+		if (*++raw != '=')	error("Unknown token: '%c'.", *raw);
 		return TOK_ASSIGN;
 	case '\0':
 		return 0;
 	default:
-		error("Unknown token: '%c'", *raw);
+		error("Unknown token: '%c'.", *raw);
 	}
 
 	return 0;
 }
+
+
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
