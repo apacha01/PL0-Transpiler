@@ -26,6 +26,13 @@
 ///////////////////////////////////////////////////////BIBLIOTECAS///////////////////////////////////////////////////////
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <ctype.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <stdarg.h>
+#include <string.h>
+#include <unistd.h>
 /////////////////////////////////////////////////////////DEFINES/////////////////////////////////////////////////////////
 /*
 	The reserved words are: const, var, procedure, call, begin, end, if, then, while, do, and odd.
