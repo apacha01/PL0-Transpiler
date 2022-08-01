@@ -1,0 +1,4 @@
+{ 3: multiple constants }
+const one = 1, two = 2;
+
+.

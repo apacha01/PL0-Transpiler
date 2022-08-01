@@ -1,24 +1,31 @@
 /*
 * EBNF -> 
-* .pl0 -- in C
+* .pl0 -- PL/0 compiler.
 *
 * program	= block "." .
 * block		= [ "const" ident "=" number { "," ident "=" number } ";" ]
-*		  [ "var" ident { "," ident } ";" ]
+*		  [ "var" ident [ array ] { "," ident [ array ] } ";" ]
+*		  { "forward" ident ";" }
 *		  { "procedure" ident ";" block ";" } statement .
 * statement	= [ ident ":=" expression
 *		  | "call" ident
 *		  | "begin" statement { ";" statement } "end"
-*		  | "if" condition "then" statement
-*		  | "while" condition "do" statement ] .
+*		  | "if" condition "then" statement [ "else" statement ]
+*		  | "while" condition "do" statement
+*		  | "readInt" [ "into" ] ident
+*		  | "readChar" [ "into" ] ident
+*		  | "writeInt" expression
+*		  | "writeChar" expression
+*		  | "writeStr" ( ident | string )
+*		  | "exit" expression ] .
 * condition	= "odd" expression
-*		| expression ( "=" | "#" | "<" | ">" ) expression .
-* expression	= [ "+" | "-" ] term { ( "+" | "-" ) term } .
-* term		= factor { ( "*" | "/" ) factor } .
+*		  | expression ( comparator ) expression .
+* expression	= [ "+" | "-" | "not" ] term { ( "+" | "-" | "or" ) term } .
+* term		= factor { ( "*" | "/" | "mod" | "and" ) factor } .
 * factor	= ident
-*		| number
-*		| "(" expression ")" .
-* ident		= "A-Za-z_" { "A-Za-z0-9_" } .
-* number	= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" .
+*		  | number
+*		  | "(" expression ")" .
+* comparator	= "=" | "#" | "<" | ">" | "<=" | ">=" | "<>" .
+* array		= "size" number .
 *
 */

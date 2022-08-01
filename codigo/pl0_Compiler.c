@@ -1,26 +1,33 @@
 //////////////////////////////////////////////////////EBNF PARA PL0//////////////////////////////////////////////////////
 /*
 * EBNF -> 
-* .pl0
+* .pl0 -- PL/0 compiler.
 *
 * program		= block "." .
 * block			= [ "const" ident "=" number { "," ident "=" number } ";" ]
-*		  		[ "var" ident { "," ident } ";" ]
+*		  		[ "var" ident [ array ] { "," ident [ array ] } ";" ]
+*		  		{ "forward" ident ";" }
 *		  		{ "procedure" ident ";" block ";" } statement .
 * statement		= [ ident ":=" expression
-*		  		| "call" ident
-*		  		| "begin" statement { ";" statement } "end"
-*		  		| "if" condition "then" statement
-*		  		| "while" condition "do" statement ] .
+*		 		 | "call" ident
+*		 		 | "begin" statement { ";" statement } "end"
+*		 		 | "if" condition "then" statement [ "else" statement ]
+*		 		 | "while" condition "do" statement
+*		 		 | "readInt" [ "into" ] ident
+*		 		 | "readChar" [ "into" ] ident
+*		 		 | "writeInt" expression
+*		 		 | "writeChar" expression
+*		 		 | "writeStr" ( ident | string )
+*		 		 | "exit" expression ] .
 * condition		= "odd" expression
-*				| expression ( "=" | "#" | "<" | ">" ) expression .
-* expression	= [ "+" | "-" ] term { ( "+" | "-" ) term } .
-* term			= factor { ( "*" | "/" ) factor } .
+*		  		| expression ( comparator ) expression .
+* expression	= [ "+" | "-" | "not" ] term { ( "+" | "-" | "or" ) term } .
+* term			= factor { ( "*" | "/" | "mod" | "and" ) factor } .
 * factor		= ident
-*				| number
-*				| "(" expression ")" .
-* ident			= "A-Za-z_" { "A-Za-z0-9_" } .
-* number		= "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" .
+*		 		 | number
+*		 		 | "(" expression ")" .
+* comparator	= "=" | "#" | "<" | ">" | "<=" | ">=" | "<>" .
+* array			= "size" number .
 *
 */
 ///////////////////////////////////////////////////////BIBLIOTECAS///////////////////////////////////////////////////////
@@ -34,11 +41,6 @@
 #include <string.h>
 #include <unistd.h>
 /////////////////////////////////////////////////////////DEFINES/////////////////////////////////////////////////////////
-/*
-	The reserved words are: const, var, procedure, call, begin, end, if, then, while, do, and odd.
-	The symbols are '.', '=', ',', ';', ':=', '#', '<', '>', '+', '-', '*', '/', '(', and ')'.
-	There are also the identifiers and numbers.
-*/
 #define TOK_IDENT			'I'
 #define TOK_NUMBER			'N'
 #define TOK_CONST			'C'
@@ -49,23 +51,42 @@
 #define TOK_END				'E'
 #define TOK_IF				'i'
 #define TOK_THEN			'T'
+#define TOK_ELSE			'e'
 #define TOK_WHILE			'W'
 #define TOK_DO				'D'
 #define TOK_ODD				'O'
+#define TOK_WRITEINT		'w'
+#define TOK_WRITECHAR		'H'
+#define TOK_WRITESTR		'S'
+#define TOK_READINT			'R'
+#define TOK_READCHAR		'h'
+#define TOK_INTO			'n'
+#define TOK_SIZE			's'
+#define TOK_EXIT			'X'
+#define TOK_AND				'&'
+#define TOK_OR				'|'
+#define TOK_NOT				'~'
+#define TOK_FORWARD			'F'
 #define TOK_DOT				'.'
 #define TOK_EQUAL			'='
 #define TOK_COMMA			','
 #define TOK_SEMICOLON		';'
-#define TOK_ASSIGN			':'		// assign is actually a combination of 2 character (':='), but colon is unused
+#define TOK_ASSIGN			':'			// assign is actually a combination of 2 character (':='), but colon is unused
 #define TOK_HASH			'#'
 #define TOK_LESSTHAN		'<'
 #define TOK_GREATERTHAN		'>'
+#define TOK_LTEQUALS		'{'
+#define TOK_GTEQUALS		'}'
 #define TOK_PLUS			'+'
 #define TOK_MINUS			'-'
 #define TOK_MULT			'*'
 #define TOK_DIV				'/'
+#define TOK_MODULO			'%'
 #define TOK_PARENTESIS_L	'('
 #define TOK_PARENTESIS_R	')'
+#define TOK_BRACKET_L		'['
+#define TOK_BRACKET_R		']'
+#define TOK_STRING			'"'
 
 ////////////////////////////////////////////////////////VARIABLES////////////////////////////////////////////////////////
 static char *raw;			// for raw source code
@@ -78,16 +99,19 @@ static int type;			// number corresponding to token
 static void error(const char*, ...);	// error handling routine. Prints the error and gives up on compiling
 static void readin(char*/*raw*/);		// reads the file and calls error if needed. Puts source code in raw.
 static void comment();					// skips comments withing wource code.
-static void ident();					// gets identifier or reserved word ant returns it token.
-static void numbers();					// gets number and returns token, error if number is invalid.
-static void lex();						// returns token read in source code. error if invalid
+static int ident();						// gets identifier or reserved word ant returns it token.
+static int number();					// gets number and returns token, error if number is invalid.
+bool isNumber(char*);					// checks if given string is a valid number
+static int string();					// gets string and returns token ASD NOT IMPLEMENTED YET
+static int lex();						// returns token read in source code. error if invalid
+static void parse();
 //////////////////////////////////////////////////////////Main///////////////////////////////////////////////////////////
 int main(int argc, char *argv[]){
 
 	char *startp;
 
 	if (argc != 2) {
-		(void) fputs("usage: pl0c file.pl0\n", stderr);
+		(void) fputs("Usage: pl0c file.pl0\n", stderr);
 		exit(1);
 	}
 
@@ -187,7 +211,7 @@ static void readin(char *file)
 
 	if (fstat(fildes, &st) == -1)						error("Couldn't get file size.");
 
-	if ((raw = malloc(st.st_size + 1)) == NULL)			error("Malloc failed.");
+	if ((raw = (char*)malloc(st.st_size + 1)) == NULL)	error("Malloc failed.");
 
 	if (read(fildes, raw, st.st_size) != st.st_size)	error("Couldn't read %s.", file);
 	
@@ -209,7 +233,7 @@ static void comment()						// comments with format: {...}
 
 // since both, ident and reserved words can start with lowercase letters there is no way to distinguish
 // so reserved words are handled in the ident function
-static void ident(){
+static int ident(){
 	
 	char *p;
 	size_t i, len;
@@ -226,7 +250,7 @@ static void ident(){
 
 	free(token);
 
-	if ((token = malloc(len + 1)) == NULL)	error("Token malloc for identifier failed.");
+	if ((token = (char*)malloc(len + 1)) == NULL)	error("Token malloc for identifier failed.");
 
 	// getting token form raw source code
 	for (i = 0; i < len; i++)	token[i] = *p++;
@@ -245,11 +269,24 @@ static void ident(){
 	else if (!strcmp(token, "while"))		return TOK_WHILE;
 	else if (!strcmp(token, "do"))			return TOK_DO;
 	else if (!strcmp(token, "odd"))			return TOK_ODD;
+	else if (!strcmp(token, "writeInt"))	return TOK_WRITEINT;
+	else if (!strcmp(token, "writeChar"))	return TOK_WRITECHAR;
+	else if (!strcmp(token, "writeStr"))	return TOK_WRITESTR;
+	else if (!strcmp(token, "readInt"))		return TOK_READINT;
+	else if (!strcmp(token, "readChar"))	return TOK_READCHAR;
+	else if (!strcmp(token, "into"))		return TOK_INTO;
+	else if (!strcmp(token, "size"))		return TOK_SIZE;
+	else if (!strcmp(token, "exit"))		return TOK_EXIT;
+	else if (!strcmp(token, "and"))			return TOK_AND;
+	else if (!strcmp(token, "or"))			return TOK_OR;
+	else if (!strcmp(token, "not"))			return TOK_NOT;
+	else if (!strcmp(token, "mod"))			return TOK_MODULO;
+	else if (!strcmp(token, "forward"))		return TOK_FORWARD;
 
 	return TOK_IDENT;
 }
 
-static void number(){
+static int number(){
 
 	const char *errstr;
 	char *p;
@@ -267,7 +304,7 @@ static void number(){
 
 	free(token);
 
-	if ((token = malloc(len + 1)) == NULL)	error("Token malloc for number failed.");
+	if ((token = (char*)malloc(len + 1)) == NULL)	error("Token malloc for number failed.");
 
 	// getting token form raw source code 										ASD p++ en otra linea?
 	for (i = 0; i < len; i++)	
@@ -296,9 +333,11 @@ static void number(){
 	
 	*/
 
-	(void) strtonum(token, 0, LONG_MAX, &errstr);
+	// it returns a long long, but its used as a number validator, so type doesn't matter. Cast to void
+	//(void) strtonum(token, 0, LONG_MAX, &errstr);
+	//if (errstr != NULL)	error("Invalid number: %s.", token);
 
-	if (errstr != NULL)	error("Invalid number: %s.", token);
+	//if (!isNumber(token))	error("Invalid number: %s.", token);
 
 	return TOK_NUMBER;
 }
@@ -320,34 +359,93 @@ static int lex()
 
 	// else, get the symbol
 	switch (*raw) {
-	case '{':
-		comment();
-		goto again;
-	case '.':
-	case '=':
-	case ',':
-	case ';':
-	case '#':
-	case '<':
-	case '>':
-	case '+':
-	case '-':
-	case '*':
-	case '/':
-	case '(':
-	case ')':
-		return (*raw);
-	case ':':
-		if (*++raw != '=')	error("Unknown token: '%c'.", *raw);
-		return TOK_ASSIGN;
-	case '\0':
-		return 0;
-	default:
-		error("Unknown token: '%c'.", *raw);
+		case '{':
+			comment();
+			goto again;
+
+		case '.':
+		case '=':
+		case ',':
+		case ';':
+		case '#':
+		case '+':
+		case '-':
+		case '*':
+		case '/':
+		case '%':
+		case '(':
+		case ')':
+		case '[':
+		case ']':
+			return (*raw);
+
+		case '<':
+			if (*++raw == '=') return TOK_LTEQUALS;
+			if (*raw == '>') return TOK_HASH;
+			raw++;
+			return TOK_LESSTHAN;
+
+		case '>':
+			if (*++raw == '=') return TOK_GTEQUALS;
+			raw++;
+			return TOK_GREATERTHAN;
+
+		case ':':
+			if (*++raw != '=')	error("Unknown token: '%c'.", *raw);
+			return TOK_ASSIGN;
+
+		case '\0':
+			return 0;
+
+		default:
+			error("Unknown token: '%c'.", *raw);
 	}
 
 	return 0;
 }
 
+//parser only writes the tokens for now
+static void parse()
+{
 
+	while ((type = lex()) != 0) {
+		raw++;
+		(void) fprintf(stdout, "%lu|\t%d\t", line, type);
+		switch (type) {
+			case TOK_IDENT:
+			case TOK_NUMBER:
+			case TOK_CONST:
+			case TOK_VAR:
+			case TOK_PROCEDURE:
+			case TOK_CALL:
+			case TOK_BEGIN:
+			case TOK_END:
+			case TOK_IF:
+			case TOK_THEN:
+			case TOK_WHILE:
+			case TOK_DO:
+			case TOK_ODD:
+				(void) fprintf(stdout, "%s", token);
+				break;
+			case TOK_DOT:
+			case TOK_EQUAL:
+			case TOK_COMMA:
+			case TOK_SEMICOLON:
+			case TOK_HASH:
+			case TOK_LESSTHAN:
+			case TOK_GREATERTHAN:
+			case TOK_PLUS:
+			case TOK_MINUS:
+			case TOK_MULT:
+			case TOK_DIV:
+			case TOK_PARENTESIS_L:
+			case TOK_PARENTESIS_R:
+				(void) fputc(type, stdout);
+				break;
+			case TOK_ASSIGN:
+				(void) fputs(":=", stdout);
+			}
+		(void) fputc('\n', stdout);
+	}
+}
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
