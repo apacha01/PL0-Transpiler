@@ -27,15 +27,49 @@
 #include <stdio.h>
 #include <stdlib.h>
 /////////////////////////////////////////////////////////DEFINES/////////////////////////////////////////////////////////
+/*
+	The reserved words are: const, var, procedure, call, begin, end, if, then, while, do, and odd.
+	The symbols are '.', '=', ',', ';', ':=', '#', '<', '>', '+', '-', '*', '/', '(', and ')'.
+	There are also the identifiers and numbers.
+*/
+#define TOK_IDENT			'I'
+#define TOK_NUMBER			'N'
+#define TOK_CONST			'C'
+#define TOK_VAR				'V'
+#define TOK_PROCEDURE		'P'
+#define TOK_CALL			'c'
+#define TOK_BEGIN			'B'
+#define TOK_END				'E'
+#define TOK_IF				'i'
+#define TOK_THEN			'T'
+#define TOK_WHILE			'W'
+#define TOK_DO				'D'
+#define TOK_ODD				'O'
+#define TOK_DOT				'.'
+#define TOK_EQUAL			'='
+#define TOK_COMMA			','
+#define TOK_SEMICOLON		';'
+#define TOK_ASSIGN			':'		// assign is actually a combination of 2 character (':='), but colon is unused
+#define TOK_HASH			'#'
+#define TOK_LESSTHAN		'<'
+#define TOK_GREATERTHAN		'>'
+#define TOK_PLUS			'+'
+#define TOK_MINUS			'-'
+#define TOK_MULT			'*'
+#define TOK_DIV				'/'
+#define TOK_PARENTESIS_L	'('
+#define TOK_PARENTESIS_R	')'
 
 ////////////////////////////////////////////////////////VARIABLES////////////////////////////////////////////////////////
-char *raw;					// for raw source code
+static char *raw;			// for raw source code
 static size_t line = 1;		// line counter (starts at 1)
+static char *token;			// for lexing, the token that lexer reads from source code
+static int type;			// number corresponding to token
 ///////////////////////////////////////////////////////ESTRUCTURAS///////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////PROTOTIPOS DE FUNCIONES/////////////////////////////////////////////////
-static void error(const char*, ...);		//  error handling routine
-static void readin(char*);
+static void error(const char*, ...);		// error handling routine
+static void readin(char*/*raw*/);			// reads the file and calls error if needed. Puts source code in raw.
 
 //////////////////////////////////////////////////////////Main///////////////////////////////////////////////////////////
 int main(int argc, char *argv[]){
@@ -62,6 +96,7 @@ static void error(const char *format, ...)
 	/*
 
 	***** va -> variable arguments
+	https://www.gnu.org/software/libc/manual/html_node/Argument-Macros.html#Argument-Macros
 
 	va_list: The type va_list is used for argument pointer variables.
 
@@ -115,20 +150,150 @@ static void readin(char *file)
 												pathname contained in the symbolic link.
 	*/
 
-	if (strrchr(file, '.') == NULL) 					error("File must end in '.pl0'");
+	if (strrchr(file, '.') == NULL) 					error("File must end in '.pl0'.");
 
-	if (!!strcmp(strrchr(file, '.'), ".pl0"))			error("File must end in '.pl0'");
+	if (!!strcmp(strrchr(file, '.'), ".pl0"))			error("File must end in '.pl0'.");
 
-	if ((fildes = open(file, O_RDONLY)) == -1)			error("Couldn't open %s", file);
+	if ((fildes = open(file, O_RDONLY)) == -1)			error("Couldn't open %s.", file);
 
-	if (fstat(fildes, &st) == -1)						error("Couldn't get file size");
+	if (fstat(fildes, &st) == -1)						error("Couldn't get file size.");
 
-	if ((raw = malloc(st.st_size + 1)) == NULL)			error("Malloc failed");
+	if ((raw = malloc(st.st_size + 1)) == NULL)			error("Malloc failed.");
 
-	if (read(fildes, raw, st.st_size) != st.st_size)	error("Couldn't read %s", file);
+	if (read(fildes, raw, st.st_size) != st.st_size)	error("Couldn't read %s.", file);
 	
 	raw[st.st_size] = '\0';
 
 	(void) close(fildes);
+}
+
+static void comment()						// comments with format: {...}
+{
+	int ch;
+
+	// skip everithing until '}'
+	while ((ch = *raw++) != '}') {
+		if (ch == '\0') error("Unterminated comment.");
+		if (ch == '\n') line++;
+	}
+}
+
+static void ident(){
+
+	char *p;
+	size_t i, len;
+
+	p = raw;
+
+	// check if its alphanumeric
+	while (isalnum(*raw) || *raw == '_')	raw++;
+
+	// getting the length of the next token
+	len = raw - p;
+
+	raw--;
+
+	free(token);
+
+	if ((token = malloc(len + 1)) == NULL)	error("Token malloc for identifier failed.");
+
+	// getting token form raw source code
+	for (i = 0; i < len; i++)	token[i] = *p++;
+
+	token[i] = '\0';
+
+	// return corresponding token
+	if (!strcmp(token, "const")) 			return TOK_CONST;
+	else if (!strcmp(token, "var"))			return TOK_VAR;
+	else if (!strcmp(token, "procedure"))	return TOK_PROCEDURE;
+	else if (!strcmp(token, "call"))		return TOK_CALL;
+	else if (!strcmp(token, "begin"))		return TOK_BEGIN;
+	else if (!strcmp(token, "end"))			return TOK_END;
+	else if (!strcmp(token, "if"))			return TOK_IF;
+	else if (!strcmp(token, "then"))		return TOK_THEN;
+	else if (!strcmp(token, "while"))		return TOK_WHILE;
+	else if (!strcmp(token, "do"))			return TOK_DO;
+	else if (!strcmp(token, "odd"))			return TOK_ODD;
+
+	return TOK_IDENT;
+}
+
+static void number(){
+
+	const char *errstr;
+	char *p;
+	size_t i, j = 0, len;
+
+	p = raw;
+	
+	// check if its a digit
+	while (isdigit(*raw) || *raw == '_')	raw++;
+	
+	// getting the length of the next token
+	len = raw - p;
+
+	raw--;
+
+	free(token);
+
+	if ((token = malloc(len + 1)) == NULL)	error("Token malloc for number failed.");
+
+	// getting token form raw source code 										ASD p++ en otra linea?
+	for (i = 0; i < len; i++)	
+		if (isdigit(*p)) token[j++] = *p++;
+
+	token[j] = '\0';
+
+	(void) strtonum(token, 0, LONG_MAX, &errstr);
+
+	if (errstr != NULL)	error("Invalid number: %s", token);
+
+	return TOK_NUMBER;
+}
+
+static int lex()
+{
+	// labeled statement for goto
+	again:
+	
+	// Skip whitespace
+	while (*raw == ' ' || *raw == '\t' || *raw == '\n')
+		if (*raw++ == '\n') line++;
+
+	//if its a letter, get identifier
+	if (isalpha(*raw) || *raw == '_')	return ident();
+
+	// if its a digit, get number
+	if (isdigit(*raw))	return number();
+
+	// else, get the symbol
+	switch (*raw) {
+	case '{':
+		comment();
+		goto again;
+	case '.':
+	case '=':
+	case ',':
+	case ';':
+	case '#':
+	case '<':
+	case '>':
+	case '+':
+	case '-':
+	case '*':
+	case '/':
+	case '(':
+	case ')':
+		return (*raw);
+	case ':':
+		if (*++raw != '=')	error("Unknown token: '%c'", *raw);
+		return TOK_ASSIGN;
+	case '\0':
+		return 0;
+	default:
+		error("Unknown token: '%c'", *raw);
+	}
+
+	return 0;
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
