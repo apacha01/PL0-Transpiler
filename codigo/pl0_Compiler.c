@@ -111,7 +111,7 @@ int main(int argc, char *argv[]){
 	char *startp;
 
 	if (argc != 2) {
-		(void) fputs("Usage: pl0c file.pl0\n", stderr);
+		(void) fputs("Usage: pl0_compiler file.pl0\n", stderr);
 		exit(1);
 	}
 
@@ -121,6 +121,7 @@ int main(int argc, char *argv[]){
 	parse();
 
 	free(startp);
+	free(raw);
 
 	return 0;
 }
@@ -162,7 +163,7 @@ static void error(const char *format, ...)
 
 	//as soon as we encounter an error, no matter what it might be,
 	//we will report it to the user and then give up on the compilation.
-	(void) fprintf(stderr, "pl0c: error: %lu: ", line);
+	(void) fprintf(stderr, "pl0_compiler: error: %lu: ", line);
 
 	va_start(args, format);
 	(void) vfprintf(stderr, format, args);
@@ -175,7 +176,7 @@ static void error(const char *format, ...)
 
 static void readin(char *file)
 {
-	int fildes;
+	int fildes, end;
 	struct stat st;
 
 	/*
@@ -198,24 +199,26 @@ static void readin(char *file)
 	
 	Where information is placed concerning the file
 
-		stat structure: off_t	st_size		For regular files, the file size in bytes. 
-											For symbolic links, the length in bytes of the 
-												pathname contained in the symbolic link.
+		stat structure: off_t	st_size		For regular files, the file size in bytes.
 	*/
 
 	if (strrchr(file, '.') == NULL) 					error("File must end in '.pl0'.");
 
 	if (!!strcmp(strrchr(file, '.'), ".pl0"))			error("File must end in '.pl0'.");
 
-	if ((fildes = open(file, O_RDONLY)) == -1)			error("Couldn't open %s.", file);
+	if ((fildes = open(file, O_RDONLY)) == -1)			error("Couldn't open '%s'.", file);
 
 	if (fstat(fildes, &st) == -1)						error("Couldn't get file size.");
 
 	if ((raw = (char*)malloc(st.st_size + 1)) == NULL)	error("Malloc failed.");
 
-	if (read(fildes, raw, st.st_size) != st.st_size)	error("Couldn't read %s.", file);
+	//INTERNET OPTION (doesn't work)
+	//if (read(fildes, raw, st.st_size) != st.st_size)	error("Couldn't read '%s'.", file);
 	
-	raw[st.st_size] = '\0';
+	if ((end = read(fildes, raw, st.st_size)) == -1)	error("Couldn't read '%s'.", file);
+
+	//raw[st.st_size] = '\0';
+	raw[end] = '\0';
 
 	(void) close(fildes);
 }
@@ -391,7 +394,7 @@ static int lex()
 			return TOK_GREATERTHAN;
 
 		case ':':
-			if (*++raw != '=')	error("Unknown token: '%c'.", *raw);
+			if (*++raw != '=')	error("Unknown token after ':' -> '%c'.", *raw);
 			return TOK_ASSIGN;
 
 		case '\0':
