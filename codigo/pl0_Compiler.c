@@ -104,11 +104,11 @@ static int number();					// gets number and returns token, error if number is in
 bool isNumber(char*);					// checks if given string is a valid number
 static int string();					// gets string and returns token ASD NOT IMPLEMENTED YET
 static int lex();						// returns token read in source code. error if invalid
+static void next();						// fetchs the next token
+static void expect(int/*expected*/);	// returns error if token if diff from expected 
 static void parse();
 //////////////////////////////////////////////////////////Main///////////////////////////////////////////////////////////
 int main(int argc, char *argv[]){
-
-	char *startp;
 
 	if (argc != 2) {
 		(void) fputs("Usage: pl0_compiler file.pl0\n", stderr);
@@ -116,18 +116,15 @@ int main(int argc, char *argv[]){
 	}
 
 	readin(argv[1]);
-	startp = raw;
 
 	parse();
 
-	free(startp);
 	free(raw);
 
 	return 0;
 }
 ////////////////////////////////////////////////////////FUNCIONES////////////////////////////////////////////////////////
-static void error(const char *format, ...)
-{
+static void error(const char *format, ...){
 	/*
 
 	***** va -> variable arguments
@@ -163,7 +160,7 @@ static void error(const char *format, ...)
 
 	//as soon as we encounter an error, no matter what it might be,
 	//we will report it to the user and then give up on the compilation.
-	(void) fprintf(stderr, "pl0_compiler: error: %lu: ", line);
+	(void) fprintf(stderr, "pl0_compiler error in line: %lu: ", line);
 
 	va_start(args, format);
 	(void) vfprintf(stderr, format, args);
@@ -174,8 +171,7 @@ static void error(const char *format, ...)
 	exit(1);
 }
 
-static void readin(char *file)
-{
+static void readin(char *file){
 	int fildes, end;
 	struct stat st;
 
@@ -223,8 +219,7 @@ static void readin(char *file)
 	(void) close(fildes);
 }
 
-static void comment()						// comments with format: {...}
-{
+static void comment(){						// comments with format: {...}
 	int ch;
 
 	// skip everithing until '}'
@@ -340,13 +335,23 @@ static int number(){
 	//(void) strtonum(token, 0, LONG_MAX, &errstr);
 	//if (errstr != NULL)	error("Invalid number: %s.", token);
 
-	//if (!isNumber(token))	error("Invalid number: %s.", token);
+	if (!isNumber(token))	error("Invalid number: %s.", token);
 
 	return TOK_NUMBER;
 }
 
-static int lex()
-{
+bool isNumber(char *n){
+	
+	int length = strlen(n);
+	
+	for (int i = 0; i < length; i++){
+		if (n[i] < '0' || n[i] > '9')	return false;
+	}
+
+	return true;
+}
+
+static int lex(){
 	// labeled statement for goto
 	again:
 	
@@ -384,8 +389,7 @@ static int lex()
 
 		case '<':
 			if (*++raw == '=') return TOK_LTEQUALS;
-			if (*raw == '>') return TOK_HASH;
-			raw++;
+			if (*raw++ == '>') return TOK_HASH;
 			return TOK_LESSTHAN;
 
 		case '>':
@@ -407,48 +411,179 @@ static int lex()
 	return 0;
 }
 
-//parser only writes the tokens for now
-static void parse()
-{
+static void next() {
+	type = lex();
+	raw++;
+}
 
-	while ((type = lex()) != 0) {
-		raw++;
-		(void) fprintf(stdout, "%lu|\t%d\t", line, type);
-		switch (type) {
-			case TOK_IDENT:
-			case TOK_NUMBER:
-			case TOK_CONST:
-			case TOK_VAR:
-			case TOK_PROCEDURE:
-			case TOK_CALL:
-			case TOK_BEGIN:
-			case TOK_END:
-			case TOK_IF:
-			case TOK_THEN:
-			case TOK_WHILE:
-			case TOK_DO:
-			case TOK_ODD:
-				(void) fprintf(stdout, "%s", token);
-				break;
-			case TOK_DOT:
-			case TOK_EQUAL:
-			case TOK_COMMA:
-			case TOK_SEMICOLON:
-			case TOK_HASH:
-			case TOK_LESSTHAN:
-			case TOK_GREATERTHAN:
-			case TOK_PLUS:
-			case TOK_MINUS:
-			case TOK_MULT:
-			case TOK_DIV:
-			case TOK_PARENTESIS_L:
-			case TOK_PARENTESIS_R:
-				(void) fputc(type, stdout);
-				break;
-			case TOK_ASSIGN:
-				(void) fputs(":=", stdout);
-			}
-		(void) fputc('\n', stdout);
+static void expect(int expected){
+	if (expected != type)	error("Syntax error");
+	next();
+}
+
+static void parse() {
+	next();					// get first token in type
+	block();				// process acording to EBNF
+	expect(TOK_DOT);		// end of program
+
+	if (type != 0)	error("Extra tokens at the end of file.");
+}
+
+static void block(){
+	//[ "const" ident "=" number { "," ident "=" number } ";" ]
+	if (type == TOK_CONST){
+		expect(TOK_CONST);
+		expect(TOK_IDENT);
+		expect(TOK_EQUAL);
+		expect(TOK_NUMBER);
+		
+		while(type == TOK_COMMA){
+			expect(TOK_COMMA);
+			expect(TOK_IDENT);
+			expect(TOK_EQUAL);
+			expect(TOK_NUMBER);
+		}
+		
+		expect(TOK_SEMICOLON);
 	}
+
+	//[ "var" ident [ array ] { "," ident [ array ] } ";" ]
+	// ASD NOT DOING ARRAY FOR NOW
+	if (type == TOK_VAR){
+		expect(TOK_VAR);
+		expect(TOK_IDENT);
+		
+		while(type == TOK_COMMA){
+			expect(TOK_COMMA);
+			expect(TOK_IDENT);
+		}
+		
+		expect(TOK_SEMICOLON);
+	}
+
+	//{ "forward" ident ";" }
+	while(type == TOK_FORWARD){
+		expect(TOK_FORWARD);
+		expect(TOK_IDENT);
+		expect(TOK_SEMICOLON);
+	}
+
+	//{ "procedure" ident ";" block ";" } statement .
+	// Allows nested procedures
+	while(type == TOK_PROCEDURE){
+		expect(TOK_PROCEDURE);
+		expect(TOK_IDENT);
+		expect(TOK_SEMICOLON);
+		
+		block();
+		
+		expect(TOK_SEMICOLON);
+	}
+	statement();
+}
+
+static void statement(){
+	switch(type){
+		//	[ ident ":=" expression
+		case TOK_IDENT :
+			expect(TOK_IDENT);
+			expect(TOK_ASSIGN);
+			expression();
+			break;
+
+		//	| "call" ident
+		case TOK_CALL :
+			expect(TOK_CALL);
+			expect(TOK_IDENT);
+			break;
+
+		// | "begin" statement { ";" statement } "end"
+		case TOK_BEGIN :
+			expect(TOK_BEGIN);
+			statement();
+			
+			while(type == TOK_SEMICOLON){
+				statement();
+			}
+
+			expect(TOK_END);
+			break;
+
+		//	| "if" condition "then" statement [ "else" statement ]
+		case TOK_IF :
+			expect(TOK_IF);
+			condition();
+			expect(TOK_THEN);
+			statement();
+			
+			if (type == TOK_ELSE){
+				expect(TOK_ELSE);
+				statement();
+			}
+			
+			break;
+
+		//	| "while" condition "do" statement
+		case TOK_WHILE :
+			expect(TOK_WHILE);
+			condition();
+			expect(TOK_DO);
+			statement();
+			break;
+
+		//	| "readInt" [ "into" ] ident
+		case TOK_READINT :
+			expect(TOK_READINT);
+			
+			if (type == TOK_INTO){
+				expect(TOK_INTO);
+			}
+			
+			expect(TOK_IDENT);
+			break;
+
+		//	| "readChar" [ "into" ] ident
+		case TOK_READCHAR :
+			expect(TOK_READCHAR);
+			
+			if (type == TOK_INTO){
+				expect(TOK_INTO);
+			}
+			
+			expect(TOK_IDENT);
+			break;
+
+		//	| "writeInt" expression
+		case TOK_WRITEINT :
+			expect(TOK_WRITEINT);
+			expression();
+			break;
+
+		//	| "writeChar" expression
+		case TOK_WRITECHAR :
+			expect(TOK_WRITECHAR);
+			expression();
+			break;
+
+		//	| "writeStr" ( ident | string )
+		case TOK_WRITESTR :
+			expect(TOK_WRITESTR);
+
+			switch(type){
+				case TOK_IDENT:
+				case TOK_STRING:
+					next();
+					break;
+				default: error("Unexpected token after 'writeStr'.");
+			}
+			
+			break;
+
+		//	| "exit" expression ]
+		case TOK_EXIT :
+			expect(TOK_EXIT);
+			expression();
+			break;
+
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////

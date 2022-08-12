@@ -1,5 +1,0 @@
-{ 10: arithmetic }
-var x;
-
-x := x + ((x - x) * x) / x
-.

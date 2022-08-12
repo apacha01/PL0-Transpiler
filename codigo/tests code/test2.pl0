@@ -1,4 +1,0 @@
-{ 2: constant section }
-const one = 1;
-
-.
