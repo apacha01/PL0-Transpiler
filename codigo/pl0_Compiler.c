@@ -107,6 +107,13 @@ static int lex();						// returns token read in source code. error if invalid
 static void next();						// fetchs the next token
 static void expect(int/*expected*/);	// returns error if token if diff from expected 
 static void parse();
+static void block();					// process the block section in EBNF
+static void statement();				// process the statement section in EBNF
+static void expression();				// process the expression section in EBNF
+static void condition();				// process the condition section in EBNF
+static void comparator();				// process the comparator section in EBNF
+static void term();						// process the term section in EBNF
+static void factor();					// process the factor section in EBNF
 //////////////////////////////////////////////////////////Main///////////////////////////////////////////////////////////
 int main(int argc, char *argv[]){
 
@@ -427,6 +434,7 @@ static void parse() {
 	expect(TOK_DOT);		// end of program
 
 	if (type != 0)	error("Extra tokens at the end of file.");
+	printf("\n\nSyntaxis checked, all good");
 }
 
 static void block(){
@@ -584,6 +592,78 @@ static void statement(){
 			expect(TOK_EXIT);
 			expression();
 			break;
+	}
+}
 
+
+static void condition(){
+	//	"odd" expression
+	if (type == TOK_ODD){
+		expect(TOK_ODD);
+		expression();
+	}
+	//	| expression ( comparator ) expression .
+	else{
+		expression();
+		expect(TOK_PARENTESIS_L);
+		comparator();
+		expect(TOK_PARENTESIS_R);
+		expression();
+	}
+}
+
+//	"=" | "#" | "<" | ">" | "<=" | ">=" | "<>"
+static void comparator(){
+	switch (type) {
+		case TOK_EQUAL:
+		case TOK_HASH:
+		case TOK_LESSTHAN:
+		case TOK_GREATERTHAN:
+			// for now its the same if its < or <= since it doent actually compile, it just checks for syntax
+			next();
+			break;
+		default:
+			error("Invalid conditional.");
+	}
+}
+
+//	[ "+" | "-" | "not" ] term { ( "+" | "-" | "or" ) term }
+static void expression(){
+	if (type == TOK_PLUS || type == TOK_MINUS || type == TOK_NOT) next();
+
+	term();
+
+	while(type == TOK_PLUS || type == TOK_MINUS || type == TOK_NOT){
+		next();
+		term();
+	}
+}
+
+//	factor { ( "*" | "/" | "mod" | "and" ) factor }
+static void term(){
+	factor();
+	while(type == TOK_MULT || type == TOK_DIV || type == TOK_MODULO || type == TOK_AND){
+		next();
+		factor();
+	}
+}
+
+static void factor(){
+	switch(type){
+		//	ident
+		case TOK_IDENT:
+		//	number
+		case TOK_NUMBER:
+			next();
+			break;
+		//	"(" expression ")"
+		case TOK_PARENTESIS_L:
+			expect(TOK_PARENTESIS_L);
+			expression();
+			expect(TOK_PARENTESIS_R);
+			break;
+
+		default: error("Unexpected token in factor.");
+	}
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
