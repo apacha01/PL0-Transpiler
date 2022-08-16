@@ -182,6 +182,9 @@ static void readin(char *file){
 	int fildes, end;
 	struct stat st;
 
+	//Explains all functions
+	//https://www.geeksforgeeks.org/input-output-system-calls-c-create-open-close-read-write/#:~:text=What%20is%20the%20File%20Descriptor,pointers%20to%20file%20table%20entries.
+
 	/*
 	*****fstat function:
 	https://pubs.opengroup.org/onlinepubs/009696699/functions/fstat.html
@@ -217,15 +220,20 @@ static void readin(char *file){
 
 	//INTERNET OPTION (doesn't work)
 	//if (read(fildes, raw, st.st_size) != st.st_size)	error("Couldn't read '%s'.", file);
-	
+	//raw[st.st_size] = '\0';
+
+
 	if ((end = read(fildes, raw, st.st_size)) == -1)	error("Couldn't read '%s'.", file);
 
-	//raw[st.st_size] = '\0';
 	raw[end] = '\0';
 
 	(void) close(fildes);
 }
 
+
+//=======================================================================================================================
+//========================================================Lexer==========================================================
+//=======================================================================================================================
 static void comment(){						// comments with format: {...}
 	int ch;
 
@@ -401,7 +409,7 @@ static int lex(){
 
 		case '>':
 			if (*++raw == '=') return TOK_GTEQUALS;
-			raw++;
+			raw++;						//ASD hace falta este??
 			return TOK_GREATERTHAN;
 
 		case ':':
@@ -418,6 +426,9 @@ static int lex(){
 	return 0;
 }
 
+//=======================================================================================================================
+//=======================================================Parser==========================================================
+//=======================================================================================================================
 static void next() {
 	type = lex();
 	raw++;
@@ -434,7 +445,8 @@ static void parse() {
 	expect(TOK_DOT);		// end of program
 
 	if (type != 0)	error("Extra tokens at the end of file.");
-	printf("\n\nSyntaxis checked, all good");
+
+	cgEnd();
 }
 
 static void block(){
@@ -665,5 +677,67 @@ static void factor(){
 
 		default: error("Unexpected token in factor.");
 	}
+}
+
+//=======================================================================================================================
+//===================================================Code Generator======================================================
+//=======================================================================================================================
+static void out(const char *format, ...){
+	va_list ap;
+
+	va_start(ap, format);
+	(void) vfprintf(stdout, format, ap);
+	va_end(ap);
+}
+
+
+static void cgEnd(){
+	out("PL/0 compiler: Compile success.");
+}
+
+static void cgConst(){
+	out("const long %s = ", token);
+}
+
+static void cgSymbol(){
+	switch (type){
+		case TOK_IDENT:
+		case TOK_NUMBER:
+			out("%s", token);
+			break;
+		case TOK_BEGIN:		out("{\n");		break;
+		case TOK_END:		out(";\n}\n");	break;
+		case TOK_IF:		out("if(");		break;
+		case TOK_THEN:
+		case TOK_DO:
+			out(")");
+			break;
+		case TOK_ODD:			out("(");		break;
+		case TOK_WHILE:			out("while(");	break;
+		case TOK_EQUAL:			out("==");		break;
+		case TOK_COMMA:			out(",");		break;
+		case TOK_ASSIGN:		out("=");		break;
+		case TOK_HASH:			out("!=");		break;
+		case TOK_LESSTHAN:		out("<");		break;
+		case TOK_GREATERTHAN:	out(">")		break;
+		case TOK_GTEQUALS:		out(">=");		break;
+		case TOK_LTEQUALS:		out("<=");		break;
+		case TOK_AND:			out("&");		break;
+		case TOK_OR:			out("|");		break;
+		case TOK_NOT:			out("~");		break;
+		case TOK_PLUS:			out("+");		break;
+		case TOK_MINUS:			out("-");		break;
+		case TOK_MULT:			out("*");		break;
+		case TOK_DIV:			out("/");		break;
+		case TOK_MODULO:		out("%");		break;
+		case TOK_PARENTESIS_L:	out("(");		break;
+		case TOK_PARENTESIS_R:	out(")");		break;
+		case TOK_BRACKET_L:		out("[");		break;
+		case TOK_BRACKET_R:		out("]");		break;
+	}
+}
+
+static void cgSemicolon(){
+	out(";\n");
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
