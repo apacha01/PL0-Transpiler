@@ -525,19 +525,41 @@ static void block(){
 	// ASD NOT DOING ARRAY FOR NOW
 	if (type == TOK_VAR){
 		expect(TOK_VAR);
+
+		if (type == TOK_IDENT) {
+			addsymbol(TOK_VAR);
+			cgVar();
+		}
+
 		expect(TOK_IDENT);
 
 		if (type == TOK_SIZE){
 			expect(TOK_SIZE);
 			if (type == TOK_NUMBER){
-				//createArray();
+				//arraySize();	//token has the size
+				//cgArray();
 			}
 			expect(TOK_NUMBER);
 		}
 		
 		while(type == TOK_COMMA){
 			expect(TOK_COMMA);
+
+			if (type == TOK_IDENT) {
+				addsymbol(TOK_VAR);
+				cgVar();
+			}
+
 			expect(TOK_IDENT);
+
+			if (type == TOK_SIZE){
+				expect(TOK_SIZE);
+				if (type == TOK_NUMBER){
+					//arraySize();	//token has the size
+					//cgArray();
+				}
+				expect(TOK_NUMBER);
+			}
 		}
 		
 		expect(TOK_SEMICOLON);
@@ -773,7 +795,7 @@ static void cgSymbol(){
 		case TOK_BEGIN:			out("{\n");		break;
 		case TOK_END:			out(";\n}\n");	break;
 		case TOK_IF:			out("if(");		break;
-		case TOK_THEN:			out("){");		break;
+		case TOK_THEN:			out("){\n");	break;
 		case TOK_DO:			out(")");		break;
 		case TOK_ELSE:			out(";}else{");	break;
 		case TOK_ODD:			out("(");		break;
@@ -837,6 +859,7 @@ static void initSymtab(){
 
 	if ((new = malloc(sizeof(symtab))) == NULL)	error("Malloc for first symtab failed.");
 
+	// Sentinel
 	new->depth = 0;
 	new->type = TOK_PROCEDURE;
 	new->name = "main";
@@ -907,5 +930,9 @@ again:
 	}
 */
 
+}
+
+static void cgVar(){
+	out("long %s;\n", token);
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
