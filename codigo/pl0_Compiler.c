@@ -104,6 +104,7 @@ static char *token;			// for lexing, the token that lexer reads from source code
 static int type;			// number corresponding to token
 static int depth = 0;		// for var ident's priority
 symtab *head;				// symbol table for identifiers and numbers
+bool isProcedure = false;	// to know if we are inside a procedure or just the main
 
 /////////////////////////////////////////////////PROTOTIPOS DE FUNCIONES/////////////////////////////////////////////////
 static void error(const char*, ...);	// error handling routine. Prints the error and gives up on compiling
@@ -575,15 +576,36 @@ static void block(){
 	//{ "procedure" ident ";" block ";" } statement .
 	// Allows nested procedures
 	while(type == TOK_PROCEDURE){
+		
+		//we are inside a procedure
+		isProcedure = true;
+
 		expect(TOK_PROCEDURE);
+
+		if (type == TOK_IDENT) {
+			addsymbol(TOK_PROCEDURE);
+			cgProcedure();
+		}
+
 		expect(TOK_IDENT);
 		expect(TOK_SEMICOLON);
 		
 		block();
 		
 		expect(TOK_SEMICOLON);
+
+		//end of procedure
+		isProcedure = false;
+
+		//destroy local variables and constants for repeated identifiers
+		destroysymbols();
 	}
+	
+	if (!isProcedure)	cgProcedure();
+
 	statement();
+
+	cgEndOfProgram();
 
 	if (--depth < 0)	error("Nesting depth fell below 0.");
 }
@@ -934,5 +956,21 @@ again:
 
 static void cgVar(){
 	out("long %s;\n", token);
+}
+
+static void cgProcedure(){
+	if (!isProcedure){
+		out("int main(int argc, char *argv[])");
+	}
+	else {
+		out("void %s()", token);
+	}
+	out("{\n");
+}
+
+static void cgEndOfProgram(){
+	cgSemicolon();
+	if (!isProcedure)	out("return 0;\n");
+	out("}");
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
