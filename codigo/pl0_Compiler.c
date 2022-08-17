@@ -40,6 +40,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
+
 /////////////////////////////////////////////////////////DEFINES/////////////////////////////////////////////////////////
 #define TOK_IDENT			'I'
 #define TOK_NUMBER			'N'
@@ -88,22 +89,34 @@
 #define TOK_BRACKET_R		']'
 #define TOK_STRING			'"'
 
+///////////////////////////////////////////////////////ESTRUCTURAS///////////////////////////////////////////////////////
+typedef struct symtab {
+	int depth;
+	int type;
+	char *name;
+	struct symtab *next;
+};
+
 ////////////////////////////////////////////////////////VARIABLES////////////////////////////////////////////////////////
 static char *raw;			// for raw source code
 static size_t line = 1;		// line counter (starts at 1)
 static char *token;			// for lexing, the token that lexer reads from source code
 static int type;			// number corresponding to token
-///////////////////////////////////////////////////////ESTRUCTURAS///////////////////////////////////////////////////////
+static int depth = 0;		// for var ident's priority
+symtab *head;				// symbol table for identifiers and numbers
 
 /////////////////////////////////////////////////PROTOTIPOS DE FUNCIONES/////////////////////////////////////////////////
 static void error(const char*, ...);	// error handling routine. Prints the error and gives up on compiling
 static void readin(char*/*raw*/);		// reads the file and calls error if needed. Puts source code in raw.
+//====LEXER
 static void comment();					// skips comments withing wource code.
 static int ident();						// gets identifier or reserved word ant returns it token.
 static int number();					// gets number and returns token, error if number is invalid.
 bool isNumber(char*);					// checks if given string is a valid number
 static int string();					// gets string and returns token ASD NOT IMPLEMENTED YET
 static int lex();						// returns token read in source code. error if invalid
+
+//====PARSER
 static void next();						// fetchs the next token
 static void expect(int/*expected*/);	// returns error if token if diff from expected 
 static void parse();
@@ -114,6 +127,15 @@ static void condition();				// process the condition section in EBNF
 static void comparator();				// process the comparator section in EBNF
 static void term();						// process the term section in EBNF
 static void factor();					// process the factor section in EBNF
+
+//====CODE GENERATOR
+static void out(const char*, ...);		// writes the output code
+static void initSymtab();				// initialize the symbol table
+static void cgConst();
+static void cgSymbol();
+static void cgSemicolon();
+static void cgEnd();
+
 //////////////////////////////////////////////////////////Main///////////////////////////////////////////////////////////
 int main(int argc, char *argv[]){
 
@@ -124,12 +146,15 @@ int main(int argc, char *argv[]){
 
 	readin(argv[1]);
 
+	initSymtab();
+
 	parse();
 
 	free(raw);
 
 	return 0;
 }
+
 ////////////////////////////////////////////////////////FUNCIONES////////////////////////////////////////////////////////
 static void error(const char *format, ...){
 	/*
@@ -301,7 +326,6 @@ static int ident(){
 
 static int number(){
 
-	const char *errstr;
 	char *p;
 	size_t i, j = 0, len;
 
@@ -319,9 +343,10 @@ static int number(){
 
 	if ((token = (char*)malloc(len + 1)) == NULL)	error("Token malloc for number failed.");
 
-	// getting token form raw source code 										ASD p++ en otra linea?
+	// getting token form raw source code
 	for (i = 0; i < len; i++)	
-		if (isdigit(*p)) token[j++] = *p++;
+		if (isdigit(*p)) token[j++] = *p;
+		p++;
 
 	token[j] = '\0';
 
@@ -405,11 +430,12 @@ static int lex(){
 		case '<':
 			if (*++raw == '=') return TOK_LTEQUALS;
 			if (*raw++ == '>') return TOK_HASH;
+			raw--;
 			return TOK_LESSTHAN;
 
 		case '>':
 			if (*++raw == '=') return TOK_GTEQUALS;
-			raw++;						//ASD hace falta este??
+			raw--;
 			return TOK_GREATERTHAN;
 
 		case ':':
@@ -450,17 +476,45 @@ static void parse() {
 }
 
 static void block(){
+
+	// no nested procedures
+	if (depth++ > 1)	error("Nesting depth exceeded.");
+	
 	//[ "const" ident "=" number { "," ident "=" number } ";" ]
 	if (type == TOK_CONST){
 		expect(TOK_CONST);
+
+		if (type == TOK_IDENT){
+			addsymbol(TOK_CONST);
+			cgConst();
+		}
+
 		expect(TOK_IDENT);
 		expect(TOK_EQUAL);
+
+		if (type == TOK_NUMBER) {
+			cgSymbol();
+			cgSemicolon();
+		}
+
 		expect(TOK_NUMBER);
 		
 		while(type == TOK_COMMA){
 			expect(TOK_COMMA);
+
+			if (type == TOK_IDENT){
+				addsymbol(TOK_CONST);
+				cgConst();
+			}
+
 			expect(TOK_IDENT);
 			expect(TOK_EQUAL);
+
+			if (type == TOK_NUMBER) {
+				cgSymbol();
+				cgSemicolon();
+			}
+
 			expect(TOK_NUMBER);
 		}
 		
@@ -472,6 +526,14 @@ static void block(){
 	if (type == TOK_VAR){
 		expect(TOK_VAR);
 		expect(TOK_IDENT);
+
+		if (type == TOK_SIZE){
+			expect(TOK_SIZE);
+			if (type == TOK_NUMBER){
+				//createArray();
+			}
+			expect(TOK_NUMBER);
+		}
 		
 		while(type == TOK_COMMA){
 			expect(TOK_COMMA);
@@ -500,6 +562,8 @@ static void block(){
 		expect(TOK_SEMICOLON);
 	}
 	statement();
+
+	if (--depth < 0)	error("Nesting depth fell below 0.");
 }
 
 static void statement(){
@@ -631,7 +695,8 @@ static void comparator(){
 		case TOK_HASH:
 		case TOK_LESSTHAN:
 		case TOK_GREATERTHAN:
-			// for now its the same if its < or <= since it doent actually compile, it just checks for syntax
+		case TOK_LTEQUALS:
+		case TOK_GTEQUALS:
 			next();
 			break;
 		default:
@@ -692,7 +757,7 @@ static void out(const char *format, ...){
 
 
 static void cgEnd(){
-	out("PL/0 compiler: Compile success.");
+	out("---PL/0 compiler: Compile success.---");
 }
 
 static void cgConst(){
@@ -705,13 +770,12 @@ static void cgSymbol(){
 		case TOK_NUMBER:
 			out("%s", token);
 			break;
-		case TOK_BEGIN:		out("{\n");		break;
-		case TOK_END:		out(";\n}\n");	break;
-		case TOK_IF:		out("if(");		break;
-		case TOK_THEN:
-		case TOK_DO:
-			out(")");
-			break;
+		case TOK_BEGIN:			out("{\n");		break;
+		case TOK_END:			out(";\n}\n");	break;
+		case TOK_IF:			out("if(");		break;
+		case TOK_THEN:			out("){");		break;
+		case TOK_DO:			out(")");		break;
+		case TOK_ELSE:			out(";}else{");	break;
 		case TOK_ODD:			out("(");		break;
 		case TOK_WHILE:			out("while(");	break;
 		case TOK_EQUAL:			out("==");		break;
@@ -719,7 +783,7 @@ static void cgSymbol(){
 		case TOK_ASSIGN:		out("=");		break;
 		case TOK_HASH:			out("!=");		break;
 		case TOK_LESSTHAN:		out("<");		break;
-		case TOK_GREATERTHAN:	out(">")		break;
+		case TOK_GREATERTHAN:	out(">");		break;
 		case TOK_GTEQUALS:		out(">=");		break;
 		case TOK_LTEQUALS:		out("<=");		break;
 		case TOK_AND:			out("&");		break;
@@ -734,10 +798,114 @@ static void cgSymbol(){
 		case TOK_PARENTESIS_R:	out(")");		break;
 		case TOK_BRACKET_L:		out("[");		break;
 		case TOK_BRACKET_R:		out("]");		break;
+		case TOK_STRING:		out("\"");		break;
 	}
 }
 
 static void cgSemicolon(){
 	out(";\n");
+}
+
+/*
+Symbol table so that you can't repeat var (or const) names/ident's.
+
+					before/during procedure            after procedure
++---------------+ +---------------+ +---------------+ +---------------+
+| Sentinel      | | Sentinel      | | Sentinel      | | Sentinel      |
++---------------+ +---------------+ +---------------+ +---------------+
+                  | Global consts | | Global consts | | Global consts |
+                  +---------------+ +---------------+ +---------------+
+                  | Global vars   | | Global vars   | | Global vars   |
+                  +---------------+ +---------------+ +---------------+
+                                    | Procedure     | | Procedure     |
+                                    +---------------+ +---------------+
+                                    | Local consts  |
+                                    +---------------+
+                                    | Local vars    |
+                                    +---------------+
+Struct:
+struct symtab {
+	int depth;
+	int type;
+	char *name;
+	struct symtab *next;
+};
+
+*/
+static void initSymtab(){
+	symtab *new;
+
+	if ((new = malloc(sizeof(symtab))) == NULL)	error("Malloc for first symtab failed.");
+
+	new->depth = 0;
+	new->type = TOK_PROCEDURE;
+	new->name = "main";
+	new->next = NULL;
+
+	head = new;
+}
+
+static void addsymbol(int type){
+	symtab *curr, *new;
+
+	curr = head;
+
+	while (true) {
+		if (!strcmp(curr->name, token)){
+			if (curr->depth == (depth - 1))	error("Duplicate symbol: '%s'.", token);
+		}
+
+		if (curr->next == NULL)	break;
+
+		curr = curr->next;
+	}
+
+	if ((new = malloc(sizeof(struct symtab))) == NULL)	error("Malloc for new symtab failed.");
+
+	//new->depth = curr->depth + 1;	???? ASD
+	new->depth = depth - 1;
+
+	new->type = type;
+
+	if ((new->name = strdup(token)) == NULL)	error("Malloc for new symtab name failed.");
+	
+	new->next = NULL;
+
+	curr->next = new;
+}
+
+static void destroysymbols() {
+	symtab *curr, *aux;
+	curr = head;
+
+	// my version (should work, not tested ASD)
+	while(curr->next != NULL){
+		if (curr->type == TOK_PROCEDURE && curr->next->type != TOK_PROCEDURE){
+			aux = curr->next;
+			curr->next = aux->next;
+			free(aux->name);
+			free(aux);
+		}
+		else{
+			curr = curr->next;
+		}
+	}
+/*
+//================================INTERNET VERSION
+again:
+	curr = head;
+	while (curr->next != NULL) {
+		prev = curr;
+		curr = curr->next;
+	}
+
+	if (curr->type != TOK_PROCEDURE) {
+		free(curr->name);
+		free(curr);
+		prev->next = NULL;
+		goto again;
+	}
+*/
+
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
