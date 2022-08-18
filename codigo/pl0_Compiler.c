@@ -123,7 +123,7 @@ static int lex();						// returns token read in source code. error if invalid
 //====PARSER
 static void next();						// fetchs the next token
 static void expect(int/*expected*/);	// returns error if token if diff from expected 
-static void parse();
+static void parse();					// checks syntax of input code
 static void block();					// process the block section in EBNF
 static void statement();				// process the statement section in EBNF
 static void expression();				// process the expression section in EBNF
@@ -133,12 +133,27 @@ static void term();						// process the term section in EBNF
 static void factor();					// process the factor section in EBNF
 
 //====CODE GENERATOR
-static void out(const char*, ...);		// writes the output code
-static void initSymtab();				// initialize the symbol table
-static void cgConst();
-static void cgSymbol();
-static void cgSemicolon();
-static void cgEnd();
+static void out(const char*, ...);			// writes the output code
+static void initSymtab();					// initialize the symbol table
+static void addsymbol();					// adds symbol to symbol table
+static void destroysymbols();				// destroy symbol from symbol table
+static void cgConst();						// writes the code for const in c
+static void cgSymbol();						// writes the code for the different symbols in c
+static void cgSemicolon();					// writes the code for semicolon in c
+static void cgEnd();						// writes the end of the compiler messages
+static void cgVar();						// writes the code for var in c
+static void cgProcedure();					// writes the code for a procedure in c
+static void cgEndOfProgram();				// writes the code for the end of the program in c
+static void assignmentCheck(int/*check*/);	// checks whether an assignment is valid or not (semantic)
+static void cgCall();						// writes the code for call in c
+static void cgReadint();					// writes the code for readInt in c
+static void cgReadchar();					// writes the code for readChar in c
+static void cgWriteint();					// writes the code for writeInt in c
+static void cgParenR();						// writes the code for a rigth parentesis in c
+static void cgWritechar();					// writes the code for writeChar in c
+static void cgWritestr();					// writes the code for writeStr in c
+static void cgExit();						// writes the code for exit in c
+static void cgOdd();						// writes the code for odd in c
 
 //////////////////////////////////////////////////////////Main///////////////////////////////////////////////////////////
 int main(int argc, char *argv[]){
