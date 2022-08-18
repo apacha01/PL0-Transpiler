@@ -796,11 +796,15 @@ static void comparator(){
 
 //	[ "+" | "-" | "not" ] term { ( "+" | "-" | "or" ) term }
 static void expression(){
-	if (type == TOK_PLUS || type == TOK_MINUS || type == TOK_NOT) next();
+	if (type == TOK_PLUS || type == TOK_MINUS || type == TOK_NOT){
+		cgSymbol();
+		next();
+	}
 
 	term();
 
 	while(type == TOK_PLUS || type == TOK_MINUS || type == TOK_OR){
+		cgSymbol();
 		next();
 		term();
 	}
@@ -810,6 +814,7 @@ static void expression(){
 static void term(){
 	factor();
 	while(type == TOK_MULT || type == TOK_DIV || type == TOK_MODULO || type == TOK_AND){
+		cgSymbol();
 		next();
 		factor();
 	}
@@ -819,14 +824,18 @@ static void factor(){
 	switch(type){
 		//	ident
 		case TOK_IDENT:
+			assignmentCheck(RIGTH);
 		//	number
 		case TOK_NUMBER:
+			cgSymbol();
 			next();
 			break;
 		//	"(" expression ")"
 		case TOK_PARENTESIS_L:
+			cgSymbol();
 			expect(TOK_PARENTESIS_L);
 			expression();
+			if (type == TOK_RPAREN)	cgSymbol();
 			expect(TOK_PARENTESIS_R);
 			break;
 
