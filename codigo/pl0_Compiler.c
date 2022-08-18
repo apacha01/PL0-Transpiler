@@ -762,8 +762,10 @@ static void statement(){
 static void condition(){
 	//	"odd" expression
 	if (type == TOK_ODD){
+		cgSymbol();
 		expect(TOK_ODD);
 		expression();
+		cgOdd();
 	}
 	//	| expression ( comparator ) expression .
 	else{
@@ -784,6 +786,7 @@ static void comparator(){
 		case TOK_GREATERTHAN:
 		case TOK_LTEQUALS:
 		case TOK_GTEQUALS:
+			cgSymbol();
 			next();
 			break;
 		default:
@@ -1083,5 +1086,10 @@ static void cgWritestr(){
 
 static void cgExit(){
 	out("exit(");
+}
+
+static void cgOdd(){
+	//and with 1
+	out(")%1");
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
