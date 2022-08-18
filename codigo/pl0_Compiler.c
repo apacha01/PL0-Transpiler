@@ -117,7 +117,6 @@ static void comment();					// skips comments withing wource code.
 static int ident();						// gets identifier or reserved word ant returns it token.
 static int number();					// gets number and returns token, error if number is invalid.
 bool isNumber(char*);					// checks if given string is a valid number
-static int string();					// gets string and returns token ASD NOT IMPLEMENTED YET
 static int lex();						// returns token read in source code. error if invalid
 
 //====PARSER
@@ -135,7 +134,7 @@ static void factor();					// process the factor section in EBNF
 //====CODE GENERATOR
 static void out(const char*, ...);			// writes the output code
 static void initSymtab();					// initialize the symbol table
-static void addsymbol();					// adds symbol to symbol table
+static void addsymbol(int/*type*/);			// adds symbol to symbol table
 static void destroysymbols();				// destroy symbol from symbol table
 static void cgInit();						// writes the included libraries and global vars for input reading
 static void cgEnd();						// writes the end of the compiler messages
@@ -212,7 +211,7 @@ static void error(const char *format, ...){
 
 	//as soon as we encounter an error, no matter what it might be,
 	//we will report it to the user and then give up on the compilation.
-	(void) fprintf(stderr, "pl0_compiler error in line: %lu: ", line);
+	(void) fprintf(stderr, "\npl0_compiler error in line: %lu: ", line);
 
 	va_start(args, format);
 	(void) vfprintf(stderr, format, args);
@@ -364,9 +363,10 @@ static int number(){
 	if ((token = (char*)malloc(len + 1)) == NULL)	error("Token malloc for number failed.");
 
 	// getting token form raw source code
-	for (i = 0; i < len; i++)	
+	for (i = 0; i < len; i++){
 		if (isdigit(*p)) token[j++] = *p;
 		p++;
+	}
 
 	token[j] = '\0';
 
@@ -854,7 +854,7 @@ static void factor(){
 			cgSymbol();
 			expect(TOK_PARENTESIS_L);
 			expression();
-			if (type == TOK_RPAREN)	cgSymbol();
+			if (type == TOK_PARENTESIS_R)	cgSymbol();
 			expect(TOK_PARENTESIS_R);
 			break;
 
@@ -874,12 +874,7 @@ static void out(const char *format, ...){
 }
 
 static void cgInit(){
-	out("#inlcude <stdio.h>\n
-		#include <stdlib.h>\n
-		#include <limits.h>\n
-		#include <string.h>\n
-		\n
-		static char __stdin[24];\n");
+	out("#inlcude <stdio.h>\n#include <stdlib.h>\n#include <limits.h>\n#include <string.h>\n\nstatic char __stdin[24];\n");
 }
 
 static void cgEnd(){
@@ -959,21 +954,21 @@ struct symtab {
 
 */
 static void initSymtab(){
-	symtab *new;
+	symtab *aux;
 
-	if ((new = malloc(sizeof(symtab))) == NULL)	error("Malloc for first symtab failed.");
+	if ((aux = (symtab*) malloc(sizeof(symtab))) == NULL)	error("Malloc for first symtab failed.");
 
 	// Sentinel
-	new->depth = 0;
-	new->type = TOK_PROCEDURE;
-	new->name = "main";
-	new->next = NULL;
+	aux->depth = 0;
+	aux->type = TOK_PROCEDURE;
+	aux->name = "main";
+	aux->next = NULL;
 
-	head = new;
+	head = aux;
 }
 
 static void addsymbol(int type){
-	symtab *curr, *new;
+	symtab *curr, *aux;
 
 	curr = head;
 
@@ -987,18 +982,18 @@ static void addsymbol(int type){
 		curr = curr->next;
 	}
 
-	if ((new = malloc(sizeof(struct symtab))) == NULL)	error("Malloc for new symtab failed.");
+	if ((aux = (symtab*) malloc(sizeof(struct symtab))) == NULL)	error("Malloc for new symtab failed.");
 
-	//new->depth = curr->depth + 1;	???? ASD
-	new->depth = depth - 1;
+	//aux->depth = curr->depth + 1;	???? ASD
+	aux->depth = depth - 1;
 
-	new->type = type;
+	aux->type = type;
 
-	if ((new->name = strdup(token)) == NULL)	error("Malloc for new symtab name failed.");
+	if ((aux->name = strdup(token)) == NULL)	error("Malloc for new symtab name failed.");
 	
-	new->next = NULL;
+	aux->next = NULL;
 
-	curr->next = new;
+	curr->next = aux;
 }
 
 static void destroysymbols() {
@@ -1042,7 +1037,7 @@ static void cgVar(){
 
 static void cgProcedure(){
 	if (!isProcedure){
-		out("int main(int argc, char *argv[])");
+		out("\nint main(int argc, char *argv[])");
 	}
 	else {
 		out("void %s()", token);
@@ -1053,7 +1048,7 @@ static void cgProcedure(){
 static void cgEndOfProgram(){
 	cgSemicolon();
 	if (!isProcedure)	out("return 0;\n");
-	out("}");
+	out("}\n");
 }
 
 static void assignmentCheck(int check){
@@ -1070,12 +1065,13 @@ static void assignmentCheck(int check){
 	switch(check){
 		case LEFT:
 			if (aux2->type != TOK_VAR)	error("Must be a variable: '%s'.", aux2->name);
-
+			break;
 		case RIGTH:
 			if (aux2->type == TOK_PROCEDURE) error("Can't be a procedure: '%s'", aux2->name);
-
+			break;
 		case CALL:
 			if (aux2->type != TOK_PROCEDURE) error("Must be a procedure: '%s'", aux2->name);
+			break;
 	}
 }
 
