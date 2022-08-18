@@ -789,9 +789,7 @@ static void condition(){
 	//	| expression ( comparator ) expression .
 	else{
 		expression();
-		expect(TOK_PARENTESIS_L);
 		comparator();
-		expect(TOK_PARENTESIS_R);
 		expression();
 	}
 }
@@ -997,11 +995,11 @@ static void addsymbol(int type){
 }
 
 static void destroysymbols() {
-	symtab *curr, *aux;
+	symtab *curr, *prev;
 	curr = head;
 
-	// my version (should work, not tested ASD)
-	while(curr->next != NULL){
+	// my version - tested / Doesnt work ASD
+/*	while(curr->next != NULL){
 		if (curr->type == TOK_PROCEDURE && curr->next->type != TOK_PROCEDURE){
 			aux = curr->next;
 			curr->next = aux->next;
@@ -1012,7 +1010,8 @@ static void destroysymbols() {
 			curr = curr->next;
 		}
 	}
-/*
+*/
+
 //================================INTERNET VERSION
 again:
 	curr = head;
@@ -1027,7 +1026,7 @@ again:
 		prev->next = NULL;
 		goto again;
 	}
-*/
+
 
 }
 
