@@ -88,6 +88,9 @@
 #define TOK_BRACKET_L		'['
 #define TOK_BRACKET_R		']'
 #define TOK_STRING			'"'
+#define LEFT				100
+#define RIGTH				101
+#define CALL				102
 
 ///////////////////////////////////////////////////////ESTRUCTURAS///////////////////////////////////////////////////////
 typedef struct symtab {
@@ -614,7 +617,12 @@ static void statement(){
 	switch(type){
 		//	[ ident ":=" expression
 		case TOK_IDENT :
+			assignmentCheck(LEFT);
+			cgSymbol();
 			expect(TOK_IDENT);
+
+			if (type == TOK_ASSIGN)	cgSymbol();
+			
 			expect(TOK_ASSIGN);
 			expression();
 			break;
@@ -622,29 +630,42 @@ static void statement(){
 		//	| "call" ident
 		case TOK_CALL :
 			expect(TOK_CALL);
+			if (type == TOK_IDENT) {
+				assignmentCheck(CALL);
+				cgCall();
+			}
 			expect(TOK_IDENT);
 			break;
 
 		// | "begin" statement { ";" statement } "end"
 		case TOK_BEGIN :
+			cgSymbol();
 			expect(TOK_BEGIN);
 			statement();
 			
 			while(type == TOK_SEMICOLON){
+				cgSemicolon();
+				expect(TOK_SEMICOLON);
 				statement();
 			}
 
+			if (type == TOK_END)	cgSymbol();
 			expect(TOK_END);
 			break;
 
 		//	| "if" condition "then" statement [ "else" statement ]
 		case TOK_IF :
+			cgSymbol();
 			expect(TOK_IF);
 			condition();
+			
+			if (type == TOK_THEN)	cgSymbol();
+			
 			expect(TOK_THEN);
 			statement();
 			
 			if (type == TOK_ELSE){
+				cgSymbol();
 				expect(TOK_ELSE);
 				statement();
 			}
@@ -653,8 +674,12 @@ static void statement(){
 
 		//	| "while" condition "do" statement
 		case TOK_WHILE :
+			cgSymbol();
 			expect(TOK_WHILE);
 			condition();
+
+			if (type == TOK_DO)	cgSymbol();
+
 			expect(TOK_DO);
 			statement();
 			break;
@@ -667,6 +692,11 @@ static void statement(){
 				expect(TOK_INTO);
 			}
 			
+			if (type == TOK_IDENT) {
+				assignmentCheck(LEFT);
+				cgReadint();
+			}
+
 			expect(TOK_IDENT);
 			break;
 
@@ -678,19 +708,30 @@ static void statement(){
 				expect(TOK_INTO);
 			}
 			
+			if (type == TOK_IDENT) {
+				assignmentCheck(LEFT);
+				cgReadchar();
+			}
+
 			expect(TOK_IDENT);
 			break;
 
 		//	| "writeInt" expression
 		case TOK_WRITEINT :
 			expect(TOK_WRITEINT);
+			cgWriteint();
 			expression();
+			cgParenR();
+			cgSemicolon();
 			break;
 
 		//	| "writeChar" expression
 		case TOK_WRITECHAR :
 			expect(TOK_WRITECHAR);
+			cgWritechar();
 			expression();
+			cgParenR();
+			cgSemicolon();
 			break;
 
 		//	| "writeStr" ( ident | string )
@@ -698,11 +739,10 @@ static void statement(){
 			expect(TOK_WRITESTR);
 
 			switch(type){
-				case TOK_IDENT:
-				case TOK_STRING:
-					next();
-					break;
-				default: error("Unexpected token after 'writeStr'.");
+				case TOK_IDENT:	assignmentCheck(LEFT);	cgWritestr();	expect(TOK_IDENT);	break;
+				case TOK_STRING: cgWritestr();	expect(TOK_STRING);	break;
+
+				default: error("writeStr takes an array or a string.");
 			}
 			
 			break;
@@ -710,7 +750,10 @@ static void statement(){
 		//	| "exit" expression ]
 		case TOK_EXIT :
 			expect(TOK_EXIT);
+			cgExit();
 			expression();
+			cgParenR();
+			cgSemicolon();
 			break;
 	}
 }
@@ -754,7 +797,7 @@ static void expression(){
 
 	term();
 
-	while(type == TOK_PLUS || type == TOK_MINUS || type == TOK_NOT){
+	while(type == TOK_PLUS || type == TOK_MINUS || type == TOK_OR){
 		next();
 		term();
 	}
@@ -972,5 +1015,73 @@ static void cgEndOfProgram(){
 	cgSemicolon();
 	if (!isProcedure)	out("return 0;\n");
 	out("}");
+}
+
+static void assignmentCheck(int check){
+	symtab *aux, *aux2 = NULL;
+
+	aux = head;
+	while(aux != NULL){
+		if (!strcmp(token, aux->name))	aux2 = aux;
+		aux = aux->next;
+	}
+
+	if (aux2 == NULL)	error("Undefined symbol: '%s'.", token);
+
+	switch(check){
+		case LEFT:
+			if (aux2->type != TOK_VAR)	error("Must be a variable: '%s'.", aux2->name);
+
+		case RIGTH:
+			if (aux2->type == TOK_PROCEDURE) error("Can't be a procedure: '%s'", aux2->name);
+
+		case CALL:
+			if (aux2->type != TOK_PROCEDURE) error("Must be a procedure: '%s'", aux2->name);
+	}
+}
+
+static void cgCall(){
+	out("%s();\n",token);
+}
+
+static void cgReadint(){
+	out("fgets(__stdin, sizeof(__stdin), stdin);\n");
+	out("if(__stdin[strlen(__stdin) - 1] == '\\n')\t__stdin[strlen(__stdin) - 1] = '\\0';");
+	out("%s = (long) atol(__stdin);\n", token);	//returns 0 upon failure
+	out("if (%s == 0) fprintf(stderr, \"Invalid number: %%s\\n\", __stdin);\n", token);
+	out("exit(1);");
+}
+
+static void cgReadchar(){
+	out("%s = fgetc(stdin);\n",token);
+}
+
+static void cgWriteint(){
+	//there's an expression after the writeInt so open paren
+	out("fprintf(stdout, \"%%ld\", (long)(");
+}
+
+static void cgParenR(){
+	//for closing the write instructions
+	out(")");
+}
+
+static void cgWritechar(){
+	out("fprintf(stdout, \" %%c \", (char)(");
+}
+
+static void cgWritestr(){
+	//array given
+	if (type == TOK_IDENT) {
+		//ASD not doing arrays yet
+	}
+	//string given
+	else {
+		out("fprintf(stdout, %s);\n", token);
+	}
+}
+
+static void cgExit(){
+	out("exit(");
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
