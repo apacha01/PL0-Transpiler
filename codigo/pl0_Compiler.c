@@ -137,10 +137,11 @@ static void out(const char*, ...);			// writes the output code
 static void initSymtab();					// initialize the symbol table
 static void addsymbol();					// adds symbol to symbol table
 static void destroysymbols();				// destroy symbol from symbol table
+static void cgInit();						// writes the included libraries and global vars for input reading
+static void cgEnd();						// writes the end of the compiler messages
 static void cgConst();						// writes the code for const in c
 static void cgSymbol();						// writes the code for the different symbols in c
 static void cgSemicolon();					// writes the code for semicolon in c
-static void cgEnd();						// writes the end of the compiler messages
 static void cgVar();						// writes the code for var in c
 static void cgProcedure();					// writes the code for a procedure in c
 static void cgEndOfProgram();				// writes the code for the end of the program in c
@@ -485,6 +486,9 @@ static void expect(int expected){
 }
 
 static void parse() {
+
+	cgInit();
+
 	next();					// get first token in type
 	block();				// process acording to EBNF
 	expect(TOK_DOT);		// end of program
@@ -869,6 +873,14 @@ static void out(const char *format, ...){
 	va_end(ap);
 }
 
+static void cgInit(){
+	out("#inlcude <stdio.h>\n
+		#include <stdlib.h>\n
+		#include <limits.h>\n
+		#include <string.h>\n
+		\n
+		static char __stdin[24];\n");
+}
 
 static void cgEnd(){
 	out("---PL/0 compiler: Compile success.---");
