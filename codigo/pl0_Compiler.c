@@ -118,6 +118,7 @@ static void comment();					// skips comments withing wource code.
 static int ident();						// gets identifier or reserved word ant returns it token.
 static int number();					// gets number and returns token, error if number is invalid.
 bool isNumber(char*);					// checks if given string is a valid number
+static int string();					// returns string read in source code
 static int lex();						// returns token read in source code. error if invalid
 
 //====PARSER
@@ -528,7 +529,7 @@ static int lex(){
 
 		case '\'':
 			return string();
-			
+
 		case '\0':
 			return 0;
 
