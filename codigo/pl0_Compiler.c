@@ -155,6 +155,9 @@ static void cgWritechar();					// writes the code for writeChar in c
 static void cgWritestr();					// writes the code for writeStr in c
 static void cgExit();						// writes the code for exit in c
 static void cgOdd();						// writes the code for odd in c
+static void assignArraySize();				// checks if array is a var and assigns a size
+static void arrayCheck();					// checks if given identifier is an array
+static void cgArray();						// writes the code for arrays in c
 
 //////////////////////////////////////////////////////////Main///////////////////////////////////////////////////////////
 int main(int argc, char *argv[]){
@@ -1192,7 +1195,7 @@ static void assignArraySize(){
 
 	aux->size = atol(token);
 
-		if (aux->size == 0)	error("Invalid array size for '%s'.", aux->name);
+	if (aux->size == 0)	error("Invalid array size for '%s'.", aux->name);
 }
 
 static void arrayCheck(){
