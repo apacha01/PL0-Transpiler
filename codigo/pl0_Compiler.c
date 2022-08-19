@@ -158,6 +158,7 @@ static void cgOdd();						// writes the code for odd in c
 static void assignArraySize();				// checks if array is a var and assigns a size
 static void arrayCheck();					// checks if given identifier is an array
 static void cgArray();						// writes the code for arrays in c
+static void cgCloseBracket();				// writes the code for } in c
 
 //////////////////////////////////////////////////////////Main///////////////////////////////////////////////////////////
 int main(int argc, char *argv[]){
@@ -327,6 +328,7 @@ static int ident(){
 	else if (!strcmp(token, "end"))			return TOK_END;
 	else if (!strcmp(token, "if"))			return TOK_IF;
 	else if (!strcmp(token, "then"))		return TOK_THEN;
+	else if (!strcmp(token, "else"))		return TOK_ELSE;
 	else if (!strcmp(token, "while"))		return TOK_WHILE;
 	else if (!strcmp(token, "do"))			return TOK_DO;
 	else if (!strcmp(token, "odd"))			return TOK_ODD;
@@ -415,6 +417,64 @@ bool isNumber(char *n){
 	return true;
 }
 
+static int string(){
+	char *p;
+	size_t i, len, scbar = 0;
+
+	p = ++raw;
+
+
+	while(true){
+		while (*raw != '\''){
+			if (*raw == '\n' || *raw == '\0')	error("Unterminated string.");
+			//needs extra space for the escape bar '\'
+			if (*raw++ == '"')	scbar++;
+		}
+		//for single quote character itself, you write two single quotes next to each other, ''. 
+		if (*++raw == '\'') raw++;
+		else { break; }
+	}
+
+	raw--;
+
+	len = raw - p + scbar;
+
+	if (len < 1)	error("Imposible string.");
+
+	free(token);
+	if ((token = (char*)malloc(len + 3)) == NULL)	error("Malloc for string failed.");
+
+	//start of string with "
+	token[0] = '"';
+	for (i = 1; i <= len; i++){
+		if (*p == '\''){
+			token[i++] = '\\';
+			p++;
+		}
+		//adds scape bar for " chars
+		else if (*p == '"'){
+			token[i++] = '\\';
+		}
+		token[i] = *p++;
+	}
+	//end of string
+	token[i++] = '"';
+	token[i] = '\0';
+
+	// length 1 strings or special chars (\n) are turned into char
+	if (len == 1 || (len == 2 && token[1] == '\\')){
+		token[0] = '\'';
+		if (len == 1)
+			token[2] = '\'';
+		else
+			token[3] = '\'';
+
+		return TOK_NUMBER;
+	}
+
+	return TOK_STRING;
+}
+
 static int lex(){
 	// labeled statement for goto
 	again:
@@ -466,6 +526,9 @@ static int lex(){
 			if (*++raw != '=')	error("Unknown token after ':' -> '%c'.", *raw);
 			return TOK_ASSIGN;
 
+		case '\'':
+			return string();
+			
 		case '\0':
 			return 0;
 
@@ -700,13 +763,13 @@ static void statement(){
 			
 			expect(TOK_THEN);
 			statement();
-			
+
 			if (type == TOK_ELSE){
 				cgSymbol();
 				expect(TOK_ELSE);
 				statement();
 			}
-			
+			cgCloseBracket();
 			break;
 
 		//	| "while" condition "do" statement
@@ -1155,16 +1218,6 @@ static void cgWritestr(){
 
 		if (aux2->size == 0)	error("Symbol '%s' is not an array.", token);
 
-		/*
-		int i = 0; 
-		while(%s[i] != '\\0' && i < %ld){
-			fputc((unsigned char) %s[i++], stdout);\n", token);
-		}
-		
-		%s = token;
-		%ld = aux2->size;
-		*/
-
 		out("int __strIndex = 0;");
 		out("while(%s[__strIndex] != '\\0' && __strIndex < %ld){\n", token, aux2->size);
 		out("\tfputc((unsigned char) %s[__strIndex++], stdout);\n}", token);
@@ -1214,5 +1267,9 @@ static void arrayCheck(){
 
 static void cgArray(){
 	out("[%s]", token);
+}
+
+static void cgCloseBracket(){
+	out(";}");
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
