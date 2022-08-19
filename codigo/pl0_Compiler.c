@@ -160,6 +160,7 @@ static void assignArraySize();				// checks if array is a var and assigns a size
 static void arrayCheck();					// checks if given identifier is an array
 static void cgArray();						// writes the code for arrays in c
 static void cgCloseBracket();				// writes the code for } in c
+static void cgForward();					// writes the code for a func declaration in c
 
 //////////////////////////////////////////////////////////Main///////////////////////////////////////////////////////////
 int main(int argc, char *argv[]){
@@ -321,7 +322,7 @@ static int ident(){
 	token[i] = '\0';
 
 	// return corresponding token
-	if (!strcmp(token, "const")) 			return TOK_CONST;
+	if 	(!strcmp(token, "const")) 			return TOK_CONST;
 	else if (!strcmp(token, "var"))			return TOK_VAR;
 	else if (!strcmp(token, "procedure"))	return TOK_PROCEDURE;
 	else if (!strcmp(token, "call"))		return TOK_CALL;
@@ -661,6 +662,10 @@ static void block(){
 	//{ "forward" ident ";" }
 	while(type == TOK_FORWARD){
 		expect(TOK_FORWARD);
+		if (type == TOK_IDENT) {
+			addsymbol(TOK_FORWARD);
+			cgForward();
+		}
 		expect(TOK_IDENT);
 		expect(TOK_SEMICOLON);
 	}
@@ -1071,7 +1076,11 @@ static void addsymbol(int type){
 
 	while (true) {
 		if (!strcmp(curr->name, token)){
-			if (curr->depth == (depth - 1))	error("Duplicate symbol: '%s'.", token);
+			if (curr->depth == (depth - 1)){
+				//since compiler now has two symbols of the same name at the same depth level
+				//if its a forward tok then dont error out. 
+				if (!(curr->type == TOK_FORWARD && type == TOK_PROCEDURE))	error("Duplicate symbol: '%s'.", token);
+			}
 		}
 
 		if (curr->next == NULL)	break;
@@ -1166,10 +1175,12 @@ static void assignmentCheck(int check){
 			if (aux2->type != TOK_VAR)	error("Must be a variable: '%s'.", aux2->name);
 			break;
 		case RIGTH:
-			if (aux2->type == TOK_PROCEDURE) error("Can't be a procedure: '%s'", aux2->name);
+			if (aux2->type == TOK_PROCEDURE || aux2->type == TOK_FORWARD)
+				error("Can't be a procedure: '%s'", aux2->name);
 			break;
 		case CALL:
-			if (aux2->type != TOK_PROCEDURE) error("Must be a procedure: '%s'", aux2->name);
+			if (aux2->type != TOK_PROCEDURE && aux2->type != TOK_FORWARD)
+				error("Must be a procedure: '%s'", aux2->name);
 			break;
 	}
 }
@@ -1272,5 +1283,9 @@ static void cgArray(){
 
 static void cgCloseBracket(){
 	out(";}");
+}
+
+static void cgForward(){
+	out("static void %s();",token);
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
