@@ -95,6 +95,7 @@
 ///////////////////////////////////////////////////////ESTRUCTURAS///////////////////////////////////////////////////////
 typedef struct symtab {
 	int depth;
+	long size;
 	int type;
 	char *name;
 	struct symtab *next;
@@ -545,7 +546,6 @@ static void block(){
 	}
 
 	//[ "var" ident [ array ] { "," ident [ array ] } ";" ]
-	// ASD NOT DOING ARRAY FOR NOW
 	if (type == TOK_VAR){
 		expect(TOK_VAR);
 
@@ -556,12 +556,15 @@ static void block(){
 
 		expect(TOK_IDENT);
 
+		//arrays syntax: var a size 5
 		if (type == TOK_SIZE){
 			expect(TOK_SIZE);
+
 			if (type == TOK_NUMBER){
-				//arraySize();	//token has the size
-				//cgArray();
+				assignArraySize();
+				cgArray();
 			}
+
 			expect(TOK_NUMBER);
 		}
 		
@@ -578,8 +581,8 @@ static void block(){
 			if (type == TOK_SIZE){
 				expect(TOK_SIZE);
 				if (type == TOK_NUMBER){
-					//arraySize();	//token has the size
-					//cgArray();
+					assignArraySize();
+					cgArray();
 				}
 				expect(TOK_NUMBER);
 			}
@@ -639,6 +642,18 @@ static void statement(){
 			assignmentCheck(LEFT);
 			cgSymbol();
 			expect(TOK_IDENT);
+
+			if (type == TOK_BRACKET_L){ // for refering arrays -> var a size 5 -> a[0...4]
+				arrayCheck();	//checks if last symbol is variable. array can only be variable
+				cgSymbol();
+				expect(TOK_BRACKET_L);
+
+				expression();
+
+				if (type == TOK_BRACKET_R)	cgSymbol();
+				
+				expect(TOK_BRACKET_R);
+			}
 
 			if (type == TOK_ASSIGN)	cgSymbol();
 			
@@ -707,9 +722,7 @@ static void statement(){
 		case TOK_READINT :
 			expect(TOK_READINT);
 			
-			if (type == TOK_INTO){
-				expect(TOK_INTO);
-			}
+			if (type == TOK_INTO)	expect(TOK_INTO);
 			
 			if (type == TOK_IDENT) {
 				assignmentCheck(LEFT);
@@ -723,9 +736,7 @@ static void statement(){
 		case TOK_READCHAR :
 			expect(TOK_READCHAR);
 			
-			if (type == TOK_INTO){
-				expect(TOK_INTO);
-			}
+			if (type == TOK_INTO)	expect(TOK_INTO);
 			
 			if (type == TOK_IDENT) {
 				assignmentCheck(LEFT);
@@ -741,6 +752,7 @@ static void statement(){
 			cgWriteint();
 			expression();
 			cgParenR();
+			cgParenR();
 			cgSemicolon();
 			break;
 
@@ -749,6 +761,7 @@ static void statement(){
 			expect(TOK_WRITECHAR);
 			cgWritechar();
 			expression();
+			cgParenR();
 			cgParenR();
 			cgSemicolon();
 			break;
@@ -761,7 +774,7 @@ static void statement(){
 				case TOK_IDENT:	assignmentCheck(LEFT);	cgWritestr();	expect(TOK_IDENT);	break;
 				case TOK_STRING: cgWritestr();	expect(TOK_STRING);	break;
 
-				default: error("writeStr takes an array or a string.");
+				default: error("'writeStr' takes an array or a string.");
 			}
 			
 			break;
@@ -842,10 +855,26 @@ static void factor(){
 		//	ident
 		case TOK_IDENT:
 			assignmentCheck(RIGTH);
+			cgSymbol();
+			expect(TOK_IDENT);
+
+			if (type == TOK_BRACKET_L){
+				arrayCheck();
+				cgSymbol();
+				expect(TOK_BRACKET_L);
+
+				expression();
+
+				if (type == TOK_BRACKET_R)	cgSymbol();
+				
+				expect(TOK_BRACKET_R);
+			}
+			break;
+
 		//	number
 		case TOK_NUMBER:
 			cgSymbol();
-			next();
+			expect(TOK_NUMBER);
 			break;
 		//	"(" expression ")"
 		case TOK_PARENTESIS_L:
@@ -872,7 +901,9 @@ static void out(const char *format, ...){
 }
 
 static void cgInit(){
-	out("#inlcude <stdio.h>\n#include <stdlib.h>\n#include <limits.h>\n#include <string.h>\n\nstatic char __stdin[24];\n");
+																						//24-bit buffer for reading ints
+																						//(num of chars in LONG_MIN)
+	out("#include <stdio.h>\n#include <stdlib.h>\n#include <limits.h>\n#include <string.h>\n\nstatic char __stdin[24];\n");
 }
 
 static void cgEnd(){
@@ -958,6 +989,7 @@ static void initSymtab(){
 
 	// Sentinel
 	aux->depth = 0;
+	aux->size = 0;
 	aux->type = TOK_PROCEDURE;
 	aux->name = "main";
 	aux->next = NULL;
@@ -982,8 +1014,9 @@ static void addsymbol(int type){
 
 	if ((aux = (symtab*) malloc(sizeof(struct symtab))) == NULL)	error("Malloc for new symtab failed.");
 
-	//aux->depth = curr->depth + 1;	???? ASD
 	aux->depth = depth - 1;
+
+	aux->size = 0;
 
 	aux->type = type;
 
@@ -1081,9 +1114,9 @@ static void cgCall(){
 static void cgReadint(){
 	out("fgets(__stdin, sizeof(__stdin), stdin);\n");
 	out("if(__stdin[strlen(__stdin) - 1] == '\\n')\t__stdin[strlen(__stdin) - 1] = '\\0';");
-	out("%s = (long) atol(__stdin);\n", token);	//returns 0 upon failure
-	out("if (%s == 0) fprintf(stderr, \"Invalid number: %%s\\n\", __stdin);\n", token);
-	out("exit(1);");
+	out("%s = (long) atol(__stdin);\n", token);													//returns 0 upon failure
+	out("if (%s == 0){\n\tfprintf(stderr, \"Invalid number: %%s\\n\", __stdin);\n", token);
+	out("\texit(1);\n}");
 }
 
 static void cgReadchar(){
@@ -1107,7 +1140,32 @@ static void cgWritechar(){
 static void cgWritestr(){
 	//array given
 	if (type == TOK_IDENT) {
-		//ASD not doing arrays yet
+		symtab *aux, *aux2 = NULL;
+
+		aux = head;
+		while (aux != NULL) {
+			if (!strcmp(token, aux->name))	aux2 = aux;
+			aux = aux->next;
+		}
+
+		if (aux2 == NULL)	error("Undefined symbol: '%s'.", token);
+
+		if (aux2->size == 0)	error("Symbol '%s' is not an array.", token);
+
+		/*
+		int i = 0; 
+		while(%s[i] != '\\0' && i < %ld){
+			fputc((unsigned char) %s[i++], stdout);\n", token);
+		}
+		
+		%s = token;
+		%ld = aux2->size;
+		*/
+
+		out("int __strIndex = 0;");
+		out("while(%s[__strIndex] != '\\0' && __strIndex < %ld){\n", token, aux2->size);
+		out("\tfputc((unsigned char) %s[__strIndex++], stdout);\n}", token);
+
 	}
 	//string given
 	else {
@@ -1122,5 +1180,36 @@ static void cgExit(){
 static void cgOdd(){
 	//and with 1
 	out(")%1");
+}
+
+static void assignArraySize(){
+	symtab *aux;
+
+	aux = head;
+	while(aux->next != NULL)	aux = aux->next;
+
+	if (aux->type != TOK_VAR)	error("Array '%s' must be a variable, declare with 'var'.", aux->name);
+
+	aux->size = atol(token);
+
+		if (aux->size == 0)	error("Invalid array size for '%s'.", aux->name);
+}
+
+static void arrayCheck(){
+	symtab *aux, *aux2 = NULL;
+
+	aux = head;
+	while (aux != NULL) {
+		if (!strcmp(token, aux->name))	aux2 = aux;
+		aux = aux->next;
+	}
+
+	if (aux2 == NULL)	error("Undefined symbol: '%s'.", token);
+
+	if (aux2->size == 0)	error("Symbol '%s' is not an array.", token);
+}
+
+static void cgArray(){
+	out("[%s]", token);
 }
 ///////////////////////////////////////////////////////////FIN///////////////////////////////////////////////////////////
